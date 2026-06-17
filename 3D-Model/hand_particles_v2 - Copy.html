@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Hand Gesture Control</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #video-container { position: fixed; bottom: 20px; right: 20px; width: 240px; height: 180px; 
+                           border: 2px solid #00f2ff; border-radius: 10px; overflow: hidden; z-index: 10; }
+        #webcam { width: 100%; height: 100%; transform: scaleX(-1); background: #111; }
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 20; color: white; background: rgba(0,0,0,0.6); 
+              padding: 15px; border-radius: 8px; border-left: 4px solid #00f2ff; pointer-events: none; }
+        .status { font-weight: bold; }
+        .success { color: #00ff88; }
+        .waiting { color: #ffcc00; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h2>3D Gesture System</h2>
+    <p>Status: <span id="status" class="waiting">Initializing AI...</span></p>
+    <p id="instruction">Gesture: Pinch index and thumb to drag the sphere</p>
+</div>
+
+<div id="video-container">
+    <video id="webcam" autoplay playsinline></video>
+</div>
+
+<script src="three.min.js"></script>
+<script src="hands.js"></script>
+<script src="camera_utils.js"></script>
+
+<script>
+    const statusEl = document.getElementById('status');
+    const videoElement = document.getElementById('webcam');
+
+    // --- 1. THREE.JS 3D SCENE SETUP ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Create a glowing 3D sphere made of particles
+    const geometry = new THREE.IcosahedronGeometry(3, 15);
+    const material = new THREE.PointsMaterial({ color: 0x00f2ff, size: 0.05 });
+    const sphere = new THREE.Points(geometry, material);
+    scene.add(sphere);
+    camera.position.z = 10;
+
+    // --- 2. HAND TRACKING LOGIC ---
+    let targetX = 0, targetY = 0, isPinching = false;
+
+    // Use window.Hands to ensure it works without 'import' errors
+    const hands = new window.Hands({
+        locateFile: (file) => {
+            console.log("Loading local AI file:", file);
+            return `./${file}`; // Points to YOUR local folder
+        }
+    });
+
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0, // Lite model is best for laptop performance
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+    });
+
+    hands.onResults((results) => {
+        statusEl.innerText = "System Ready";
+        statusEl.className = "success";
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const landmarks = results.multiHandLandmarks[0];
+            
+            // Index finger (8) and Thumb (4)
+            const index = landmarks[8];
+            const thumb = landmarks[4];
+
+            // Convert camera coordinates to 3D space
+            targetX = (0.5 - index.x) * 25;
+            targetY = (0.5 - index.y) * 15;
+
+            // Detect Pinch (Distance between index and thumb)
+            const distance = Math.hypot(index.x - thumb.x, index.y - thumb.y);
+            isPinching = distance < 0.07;
+        } else {
+            isPinching = false;
+        }
+    });
+
+    // Start Camera
+    const cam = new window.Camera(videoElement, {
+        onFrame: async () => { await hands.send({ image: videoElement }); },
+        width: 640, height: 480
+    });
+    cam.start();
+
+    // --- 3. ANIMATION LOOP ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (isPinching) {
+            // Smoothly move sphere toward hand position
+            sphere.position.x += (targetX - sphere.position.x) * 0.1;
+            sphere.position.y += (targetY - sphere.position.y) * 0.1;
+            sphere.rotation.y += 0.05; // Spin faster when held
+            sphere.scale.set(1.2, 1.2, 1.2);
+        } else {
+            // Idle movement
+            sphere.rotation.y += 0.005;
+            sphere.position.x *= 0.95;
+            sphere.position.y *= 0.95;
+            sphere.scale.set(1, 1, 1);
+        }
+
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // Responsive window
+    window.addEventListener('resize', () => {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+    });
+</script>
+</body>
+</html>

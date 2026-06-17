@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaotic Double Pendulum</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Trail canvas (to persist the fading path)
+    const trailCanvas = document.createElement('canvas');
+    const tCtx = trailCanvas.getContext('2d');
+
+    let width, height;
+
+    // Simulation Constants
+    const r1 = 150; // Length of first arm
+    const r2 = 150; // Length of second arm
+    const m1 = 15;  // Mass of first bob
+    const m2 = 15;  // Mass of second bob
+    const g = 1;    // Gravity constant
+
+    // Initial State (Angles in radians)
+    let a1 = Math.PI / 2;
+    let a2 = Math.PI / 2.1; 
+    let a1_v = 0;   // Angular velocity
+    let a2_v = 0;
+    
+    let px2 = -1;   // Previous x of last bob
+    let py2 = -1;   // Previous y of last bob
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        trailCanvas.width = width;
+        trailCanvas.height = height;
+        tCtx.lineCap = 'round';
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    function draw() {
+        // 1. Fading effect for the trail
+        tCtx.fillStyle = 'rgba(5, 5, 5, 0.05)'; 
+        tCtx.fillRect(0, 0, width, height);
+
+        // 2. Double Pendulum Physics Equations
+        let num1 = -g * (2 * m1 + m2) * Math.sin(a1);
+        let num2 = -m2 * g * Math.sin(a1 - 2 * a2);
+        let num3 = -2 * Math.sin(a1 - a2) * m2;
+        let num4 = a2_v * a2_v * r2 + a1_v * a1_v * r1 * Math.cos(a1 - a2);
+        let den = r1 * (2 * m1 + m2 - m2 * Math.cos(2 * a1 - 2 * a2));
+        let a1_a = (num1 + num2 + num3 * num4) / den; // Angular acceleration 1
+
+        num1 = 2 * Math.sin(a1 - a2);
+        num2 = (a1_v * a1_v * r1 * (m1 + m2));
+        num3 = g * (m1 + m2) * Math.cos(a1);
+        num4 = a2_v * a2_v * r2 * m2 * Math.cos(a1 - a2);
+        den = r2 * (2 * m1 + m2 - m2 * Math.cos(2 * a1 - 2 * a2));
+        let a2_a = (num1 * (num2 + num3 + num4)) / den; // Angular acceleration 2
+
+        // 3. Update position
+        const cx = width / 2;
+        const cy = height / 3;
+
+        const x1 = cx + r1 * Math.sin(a1);
+        const y1 = cy + r1 * Math.cos(a1);
+
+        const x2 = x1 + r2 * Math.sin(a2);
+        const y2 = y1 + r2 * Math.cos(a2);
+
+        // 4. Draw the trail on the off-screen canvas
+        if (px2 !== -1) {
+            tCtx.beginPath();
+            tCtx.moveTo(px2, py2);
+            tCtx.lineTo(x2, y2);
+            tCtx.strokeStyle = '#00f2ff';
+            tCtx.lineWidth = 2;
+            tCtx.stroke();
+        }
+
+        px2 = x2;
+        py2 = y2;
+
+        // 5. Draw the physical pendulum on main canvas
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(trailCanvas, 0, 0);
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 4;
+
+        // Arm 1
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+
+        // Arm 2
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        // Bob 1
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x1, y1, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bob 2
+        ctx.fillStyle = '#00f2ff';
+        ctx.beginPath();
+        ctx.arc(x2, y2, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 6. Integrate velocity and acceleration
+        a1_v += a1_a;
+        a2_v += a2_a;
+        a1 += a1_v;
+        a2 += a2_v;
+
+        // Optional: Friction/Damping to keep it from exploding
+        // a1_v *= 0.999; 
+        // a2_v *= 0.999;
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>

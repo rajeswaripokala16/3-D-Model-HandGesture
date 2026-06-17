@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Hand-Controlled Particles</title>
+    
+    <style>
+        /* CSS for full-screen, overlaid rendering */
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000; 
+        }
+        #webcamFeed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.1; /* Faintly show the webcam */
+            z-index: 1;
+            transform: scaleX(-1); /* Mirror the feed */
+        }
+        #outputCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+    
+    <video id="webcamFeed" autoplay playsinline></video>
+    <canvas id="outputCanvas"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469248/hands.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675469248/camera_utils.js"></script>
+    
+    <script src="main.js"></script>
+    
+</body>
+</html>

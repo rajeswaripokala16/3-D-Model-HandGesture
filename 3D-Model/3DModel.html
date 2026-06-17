@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Hand Particles - Fixed</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(20, 20, 20, 0.85); padding: 20px; border-radius: 12px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+        select, input { cursor: pointer; margin-top: 5px; }
+        #webcam { display: none; }
+        .hint { font-size: 0.85em; color: #00d4ff; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <h2 style="margin-top:0;">Particle Control</h2>
+    <label>Template:<br>
+        <select id="shapeSelect" style="width: 100%; padding: 5px;">
+            <option value="cloud">Nebula Cloud</option>
+            <option value="heart">Pulsing Heart</option>
+            <option value="saturn">Saturn Rings</option>
+            <option value="fireworks">Explosion</option>
+        </select>
+    </label>
+    <br><br>
+    <label><input type="checkbox" id="gestureToggle" checked> Gesture Control</label>
+    <div class="hint">Pinch Thumb & Index to zoom</div>
+</div>
+
+<video id="webcam" autoplay playsinline></video>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// --- INITIALIZATION ---
+const PARTICLE_COUNT = 12000;
+let gestureEnabled = true;
+let scaleFactor = 1.0;
+let targetColor = new THREE.Color(0x00ffff);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// --- BUFFER GEOMETRY SETUP ---
+const geometry = new THREE.BufferGeometry();
+const positions = new Float32Array(PARTICLE_COUNT * 3);
+const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+const colors = new Float32Array(PARTICLE_COUNT * 3);
+
+const initParticles = () => {
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const x = (Math.random() - 0.5) * 20;
+        const y = (Math.random() - 0.5) * 20;
+        const z = (Math.random() - 0.5) * 20;
+        positions.set([x, y, z], i * 3);
+        targetPositions.set([x, y, z], i * 3);
+        colors.set([0, 1, 1], i * 3);
+    }
+};
+initParticles();
+
+geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const material = new THREE.PointsMaterial({
+    size: 0.04,
+    vertexColors: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+});
+
+const points = new THREE.Points(geometry, material);
+scene.add(points);
+camera.position.z = 12;
+
+// --- SHAPE ALGORITHMS ---
+function updateTemplate(type) {
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        let x, y, z;
+        const i3 = i * 3;
+        const t = Math.random() * Math.PI * 2;
+        const u = Math.random() * 2 - 1;
+
+        if (type === 'heart') {
+            const phi = Math.random() * Math.PI * 2;
+            x = 0.4 * (16 * Math.pow(Math.sin(phi), 3));
+            y = 0.4 * (13 * Math.cos(phi) - 5 * Math.cos(2*phi) - 2 * Math.cos(3*phi) - Math.cos(4*phi));
+            z = (Math.random() - 0.5) * 2;
+        } else if (type === 'saturn') {
+            if (i < PARTICLE_COUNT * 0.5) { // Planet Sphere
+                const r = 3;
+                x = r * Math.sqrt(1 - u*u) * Math.cos(t);
+                y = r * Math.sqrt(1 - u*u) * Math.sin(t);
+                z = r * u;
+            } else { // Flat Rings
+                const r = 4.5 + Math.random() * 2.5;
+                x = r * Math.cos(t);
+                y = r * Math.sin(t) * 0.15;
+                z = r * Math.sin(t);
+            }
+        } else if (type === 'fireworks') {
+            const r = Math.pow(Math.random(), 0.5) * 10;
+            x = r * Math.sqrt(1 - u*u) * Math.cos(t);
+            y = r * Math.sqrt(1 - u*u) * Math.sin(t);
+            z = r * u;
+        } else { // Random Cloud
+            x = (Math.random() - 0.5) * 15;
+            y = (Math.random() - 0.5) * 15;
+            z = (Math.random() - 0.5) * 15;
+        }
+        targetPositions.set([x, y, z], i3);
+    }
+}
+
+// --- MEDIAPIPE HANDS HANDLER ---
+const videoElement = document.getElementById('webcam');
+
+// Accessing MediaPipe via the window object (global scripts)
+const hands = new window.Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7
+});
+
+hands.onResults((results) => {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && gestureEnabled) {
+        const hand = results.multiHandLandmarks[0];
+        
+        // Pinch Logic (Index 4 is Thumb Tip, Index 8 is Index Tip)
+        const dx = hand[4].x - hand[8].x;
+        const dy = hand[4].y - hand[8].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        // Map pinch distance to scale (multiplied for visual impact)
+        scaleFactor = THREE.MathUtils.lerp(scaleFactor, dist * 6, 0.1);
+
+        // Map Palm position to Color
+        // hand[0].x/y are normalized 0-1
+        targetColor.setHSL(hand[0].x, 0.8, 0.5);
+    }
+});
+
+const cameraUtils = new window.Camera(videoElement, {
+    onFrame: async () => {
+        await hands.send({image: videoElement});
+    },
+    width: 640,
+    height: 480
+});
+cameraUtils.start();
+
+// --- RENDERING & ANIMATION ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    const posAttr = geometry.attributes.position;
+    const colAttr = geometry.attributes.color;
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const i3 = i * 3;
+
+        // Smooth Interpolation (Lerp) towards targets
+        posAttr.array[i3] += (targetPositions[i3] * scaleFactor - posAttr.array[i3]) * 0.08;
+        posAttr.array[i3+1] += (targetPositions[i3+1] * scaleFactor - posAttr.array[i3+1]) * 0.08;
+        posAttr.array[i3+2] += (targetPositions[i3+2] * scaleFactor - posAttr.array[i3+2]) * 0.08;
+
+        // Color Lerp
+        colAttr.array[i3] += (targetColor.r - colAttr.array[i3]) * 0.08;
+        colAttr.array[i3+1] += (targetColor.g - colAttr.array[i3+1]) * 0.08;
+        colAttr.array[i3+2] += (targetColor.b - colAttr.array[i3+2]) * 0.08;
+    }
+
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+    points.rotation.y += 0.003;
+
+    renderer.render(scene, camera);
+}
+
+// UI Bindings
+document.getElementById('shapeSelect').addEventListener('change', (e) => updateTemplate(e.target.value));
+document.getElementById('gestureToggle').addEventListener('change', (e) => {
+    gestureEnabled = e.target.checked;
+    if (!gestureEnabled) scaleFactor = 1.0;
+});
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+updateTemplate('cloud');
+</script>
+</body>
+</html>
